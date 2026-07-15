@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" width="220" height="220" role="img" aria-label="cando1">
+  <title>cando1</title>
+  <!-- soft card so the mark reads on both light and dark themes -->
+  <rect x="0" y="0" width="220" height="220" rx="28" fill="#f4f4f1"/>
+  <!-- the bow: an open dark-green ring, gap at the lower-left -->
+  <path d="M 63.05 101.98 A 48 48 0 1 1 100.02 138.95"
+        fill="none" stroke="#123f36" stroke-width="15" stroke-linecap="round"/>
+  <!-- the arrow / string: teal horizontal bar across the centre -->
+  <line x1="66" y1="90" x2="150" y2="90" stroke="#27b6a4" stroke-width="12" stroke-linecap="round"/>
+  <!-- nocks: filled teal dots at each end of the arrow -->
+  <circle cx="66" cy="90" r="9.5" fill="#27b6a4"/>
+  <circle cx="150" cy="90" r="9.5" fill="#27b6a4"/>
+  <!-- wordmark -->
+  <text x="110" y="197" text-anchor="middle"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="44" font-weight="800" letter-spacing="-1">
+    <tspan fill="#123f36">cando</tspan><tspan fill="#e28a3a">1</tspan>
+  </text>
+</svg>

@@ -1,0 +1,41 @@
+# =============================================================================
+#  TESTBED — REVERSE tunnel  ::  GERMANY box = CLIENT (holds the real service)
+#  Run this on the GERMANY server:  91.107.226.85
+#      cando1 client -c testbed-reverse-germany-client.toml
+#
+#  The Germany client dials the Iran server (91.107.226.85 -> 78.39.40.30) and
+#  serves the service that Iran exposes publicly.
+#
+#  QUICK TEST:
+#    1) On Germany, start any local service on port 8000, e.g.:
+#         python3 -m http.server 8000
+#    2) Run this client on Germany and the server on Iran.
+#    3) From anywhere:   curl http://78.39.40.30:8443
+#       You should see the directory listing served by Germany. Tunnel works!
+# =============================================================================
+[log]
+level = "info"
+
+[client]
+server_addr = "78.39.40.30:443"    # the IRAN server
+transport   = "tls"
+token       = "e2b75f4de1a6e887c84c528a139e81b1e961a9ef4a9bd356"
+sni         = "www.bing.com"       # camouflage domain sent in the TLS ClientHello
+fingerprint = "chrome"
+insecure    = true                 # true because the Iran server uses a self-signed cert
+pool_size   = 3
+
+[client.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[client.reconnect]
+min_millis = 500
+max_millis = 30000
+
+# Local target for the service Iran exposes. "name" must match the server.
+[[client.services]]
+name       = "web"
+local_addr = "127.0.0.1:8000"      # the real service running on Germany

@@ -1,0 +1,26 @@
+# =============================================================================
+#  TESTBED — FORWARD tunnel  ::  GERMANY box = SERVER (exit / anchor)
+#  Run this on the GERMANY server:  91.107.226.85
+#      cando1 server -c testbed-forward-germany-server.toml
+#
+#  The Iran client dials out to this server and forwards chosen local ports;
+#  this server dials the requested target (e.g. a service on its own machine).
+# =============================================================================
+[log]
+level = "info"
+
+[server]
+bind_addr = "0.0.0.0:443"          # the Iran client dials this
+transport = "tls"
+token     = "c5c2e290c7e512b056dc017068a9d492587726b6b794938f"
+allow_forward = true               # this server dials the targets the client asks for
+# forward_whitelist = ["127.0.0.1:8000"]   # optional: lock targets to an allow-list
+
+[server.tls]
+self_name = "www.bing.com"
+
+[server.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432

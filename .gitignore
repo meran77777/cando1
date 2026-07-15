@@ -1,0 +1,22 @@
+# Binaries
+/cando1
+/cando1.exe
+/dist/
+*.exe
+*.test
+
+# Generated configs from the wizard
+cando1-server.toml
+cando1-client.toml
+
+# Local certs / keys
+*.pem
+*.key
+*.crt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

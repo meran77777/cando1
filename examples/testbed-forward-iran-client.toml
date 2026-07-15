@@ -1,0 +1,41 @@
+# =============================================================================
+#  TESTBED — FORWARD tunnel  ::  IRAN box = CLIENT (you choose the ports)
+#  Run this on the IRAN server:  78.39.40.30
+#      cando1 client -c testbed-forward-iran-client.toml
+#
+#  Iranian users connect to  78.39.40.30:8443 ; the connection is tunneled out
+#  to the Germany server, which dials the target service.
+#
+#  QUICK TEST:
+#    1) On Germany, start a local service on port 8000:  python3 -m http.server 8000
+#    2) Run the Germany server config and this client on Iran.
+#    3) From anywhere:  curl http://78.39.40.30:8443   -> Germany's HTTP server.
+# =============================================================================
+[log]
+level = "info"
+
+[client]
+server_addr = "91.107.226.85:443"  # the GERMANY server
+transport   = "tls"
+token       = "c5c2e290c7e512b056dc017068a9d492587726b6b794938f"
+sni         = "www.bing.com"
+fingerprint = "chrome"
+insecure    = true
+pool_size   = 3
+
+[client.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[client.reconnect]
+min_millis = 500
+max_millis = 30000
+
+# Local port on Iran that users connect to, forwarded to a target the Germany
+# server dials. Add more [[client.forwards]] blocks for more ports.
+[[client.forwards]]
+name        = "web"
+local_addr  = "0.0.0.0:8443"       # Iranian users connect here
+target_addr = "127.0.0.1:8000"     # the Germany server dials this

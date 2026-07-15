@@ -1,0 +1,35 @@
+# SCENARIO 2 — FOREIGN client. Holds the real services; Iran only relays.
+# Connects out to the Iran server and serves the public ports it exposes.
+# Run:  cando1 client -c scenario2-foreign-client.toml
+[log]
+level = "info"
+
+[client]
+server_addr = "IRAN_IP:443"
+transport   = "wss"
+token       = "CHANGE-ME-to-a-long-random-token"
+sni         = "www.example.com"
+host        = "www.example.com"
+ws_path     = "/cando"
+fingerprint = "chrome"
+insecure    = true
+pool_size   = 3
+
+[client.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[client.reconnect]
+min_millis = 500
+max_millis = 30000
+
+# Local targets matching the server's service names:
+[[client.services]]
+name       = "proxy"
+local_addr = "127.0.0.1:8388"
+
+[[client.services]]
+name       = "web"
+local_addr = "127.0.0.1:8080"

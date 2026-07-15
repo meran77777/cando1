@@ -1,0 +1,30 @@
+# =============================================================================
+#  TESTBED — REVERSE tunnel  ::  IRAN box = SERVER / relay only
+#  Run this on the IRAN server:  78.39.40.30
+#      cando1 server -c testbed-reverse-iran-server.toml
+#
+#  Iranian users connect to  78.39.40.30:8443  and the traffic is tunneled to
+#  the service that lives on the GERMANY box. Iran holds NO service — it only
+#  relays. This is the "users abroad, Iran only a tunnel" topology.
+# =============================================================================
+[log]
+level = "info"
+
+[server]
+bind_addr = "0.0.0.0:443"          # the Germany client dials this
+transport = "tls"                  # uTLS; works with a bare IP, no domain needed
+token     = "e2b75f4de1a6e887c84c528a139e81b1e961a9ef4a9bd356"
+
+[server.tls]
+self_name = "www.bing.com"         # cert name (self-signed). For production use a real cert.
+
+[server.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+# Public port Iranian users hit. "name" must match the Germany client's service.
+[[server.services]]
+name      = "web"
+bind_addr = "0.0.0.0:8443"
