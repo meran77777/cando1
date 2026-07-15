@@ -1,0 +1,41 @@
+# =============================================================================
+#  CLOUDFLARE-FRONTED  ::  FOREIGN origin SERVER (behind Cloudflare)
+#  Run this on your FOREIGN server (the Cloudflare origin), e.g. 91.107.226.85
+#      cando1 server -c cloudflare-foreign-server.toml
+#
+#  Cloudflare terminates TLS for the client and connects to this origin. In the
+#  common "Flexible" SSL mode Cloudflare talks plain HTTP to the origin, so this
+#  server uses the plain-WebSocket carrier (transport = "ws") on port 80.
+#
+#  ---- Cloudflare dashboard setup (one time) ----
+#   1) Add your domain to Cloudflare (any free plan works).
+#   2) DNS: A record  tunnel.YOURDOMAIN.com -> 91.107.226.85 , Proxied (orange).
+#   3) SSL/TLS mode: "Flexible"  (user<->CF = HTTPS, CF<->origin = HTTP:80).
+#      (Use "Full" instead if you want CF<->origin encrypted; then run this
+#       server with transport = "wss" on port 443 and a cert — see notes below.)
+#   4) WebSockets are enabled by default — nothing to toggle.
+#   5) (Recommended) firewall this origin so port 80 only accepts Cloudflare IP
+#      ranges (https://www.cloudflare.com/ips/), so the origin IP stays hidden.
+# =============================================================================
+[log]
+level = "info"
+
+[server]
+bind_addr = "0.0.0.0:80"           # Cloudflare (Flexible) connects here over HTTP
+transport = "ws"                   # plain WebSocket; Cloudflare provides the public TLS
+token     = "856cde96f82bda89930731c8666227e4d7efeb039c096b38"
+ws_path   = "/cando"               # must match the client
+host      = "tunnel.YOURDOMAIN.com"
+allow_forward = true               # forward mode: the client picks ports to forward here
+
+[server.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+# --- If you prefer Cloudflare "Full" mode (encrypted CF<->origin) ---
+#   transport = "wss"
+#   bind_addr = "0.0.0.0:443"        # a Cloudflare-proxied HTTPS origin port
+#   [server.tls]
+#   self_name = "tunnel.YOURDOMAIN.com"   # self-signed is fine for "Full" (not "Full strict")

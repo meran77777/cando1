@@ -1,0 +1,35 @@
+# SCENARIO 1 — IRAN client. Forwards chosen local ports to the foreign server.
+# Users in Iran connect to this machine; traffic exits through the foreign server.
+# Run:  cando1 client -c scenario1-iran-client.toml
+[log]
+level = "info"
+
+[client]
+server_addr = "FOREIGN_IP:443"
+transport   = "tls"
+token       = "CHANGE-ME-to-a-long-random-token"
+sni         = "www.example.com"        # TLS SNI / camouflage domain
+fingerprint = "chrome"                    # chrome | firefox | safari | edge | random
+insecure    = true                        # true when the server uses a self-signed cert
+pool_size   = 3                           # parallel tunnel connections
+
+[client.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[client.reconnect]
+min_millis = 500
+max_millis = 30000
+
+# Choose which local ports get tunneled to the foreign server:
+[[client.forwards]]
+name        = "openvpn"
+local_addr  = "0.0.0.0:1194"              # users in Iran connect here
+target_addr = "127.0.0.1:1194"            # the foreign server dials this
+
+[[client.forwards]]
+name        = "ssh"
+local_addr  = "0.0.0.0:2222"
+target_addr = "1.1.1.1:22"

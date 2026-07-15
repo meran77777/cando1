@@ -1,0 +1,30 @@
+# SCENARIO 2 — IRAN server (relay only). Exposes public ports that Iranian
+# users connect to; each is tunneled to the foreign client that holds the real
+# service. Run:  cando1 server -c scenario2-iran-server.toml
+[log]
+level = "info"
+
+[server]
+bind_addr = "0.0.0.0:443"
+transport = "wss"                         # WebSocket-over-TLS looks like HTTPS/CDN
+token     = "CHANGE-ME-to-a-long-random-token"
+ws_path   = "/cando"
+host      = "www.example.com"
+
+[server.tls]
+self_name = "www.example.com"
+
+[server.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+# Public ports Iranian users connect to; the "name" links to the foreign client.
+[[server.services]]
+name      = "proxy"
+bind_addr = "0.0.0.0:8388"
+
+[[server.services]]
+name      = "web"
+bind_addr = "0.0.0.0:8080"

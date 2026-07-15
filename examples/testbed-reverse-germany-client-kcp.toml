@@ -1,0 +1,41 @@
+# =============================================================================
+#  SPEED MODE (KCP)  —  REVERSE tunnel  ::  GERMANY box = CLIENT
+#  Run on the GERMANY server:  cando1 client -c testbed-reverse-germany-client-kcp.toml
+#
+#  The Germany client dials the Iran server over KCP/UDP and serves the VLESS
+#  (or any) service that Iran exposes publicly. Point local_addr at your Xray
+#  VLESS inbound port.
+#
+#  IMPORTANT: fec_data / fec_parity / the token MUST match the server exactly.
+# =============================================================================
+[log]
+level = "info"
+
+[client]
+server_addr = "78.39.40.30:443"    # IRAN server, UDP port (use your real IP)
+transport   = "kcp"
+token       = "e2b75f4de1a6e887c84c528a139e81b1e961a9ef4a9bd356"
+pool_size   = 3
+
+[client.kcp]
+mode       = "fast3"
+fec_data   = 10                    # MUST equal the server
+fec_parity = 3                     # MUST equal the server
+mtu        = 1350
+snd_wnd    = 2048
+rcv_wnd    = 2048
+sock_buf   = 16777216
+
+[client.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[client.reconnect]
+min_millis = 500
+max_millis = 30000
+
+[[client.services]]
+name       = "web"
+local_addr = "127.0.0.1:10000"     # your Xray VLESS inbound port on Germany

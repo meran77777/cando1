@@ -1,0 +1,42 @@
+# =============================================================================
+#  CLOUDFLARE-FRONTED  ::  IRAN CLIENT (connects through Cloudflare)
+#  Run this on the IRAN box, e.g. 78.39.40.30
+#      cando1 client -c cloudflare-iran-client.toml
+#
+#  The client connects to your Cloudflare domain over wss (real HTTPS to
+#  Cloudflare's edge), so DPI just sees normal traffic to Cloudflare. Cloudflare
+#  proxies the WebSocket to your hidden foreign origin.
+#
+#  Note: server_addr is the Cloudflare DOMAIN, not the origin IP. Cloudflare has
+#  a valid certificate, so insecure = false (real verification).
+# =============================================================================
+[log]
+level = "info"
+
+[client]
+server_addr = "tunnel.YOURDOMAIN.com:443"   # Cloudflare edge (domain, port 443)
+transport   = "wss"
+token       = "856cde96f82bda89930731c8666227e4d7efeb039c096b38"
+sni         = "tunnel.YOURDOMAIN.com"
+host        = "tunnel.YOURDOMAIN.com"
+ws_path     = "/cando"              # must match the server
+fingerprint = "chrome"
+insecure    = false                 # Cloudflare presents a real, valid certificate
+pool_size   = 3
+
+[client.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[client.reconnect]
+min_millis = 500
+max_millis = 30000
+
+# Local ports on Iran that users connect to, forwarded through Cloudflare to the
+# origin, which dials the target. Add more [[client.forwards]] as needed.
+[[client.forwards]]
+name        = "web"
+local_addr  = "0.0.0.0:8443"        # Iranian users connect here
+target_addr = "127.0.0.1:8000"      # the foreign origin server dials this

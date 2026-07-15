@@ -1,0 +1,37 @@
+# =============================================================================
+#  SPEED MODE (KCP)  —  REVERSE tunnel  ::  IRAN box = SERVER / relay
+#  Run on the IRAN server:  cando1 server -c testbed-reverse-iran-server-kcp.toml
+#
+#  KCP carries the tunnel over UDP with forward error correction, which beats
+#  the TCP-over-TCP meltdown that slows plain-TLS tunnels on lossy Iran<->EU
+#  links. This is the fastest mode. Note: bind_addr here is a UDP port.
+#
+#  IMPORTANT: fec_data / fec_parity / the token MUST match on both ends.
+#  Open the UDP port in your firewall (e.g. `ufw allow 443/udp`).
+# =============================================================================
+[log]
+level = "info"
+
+[server]
+bind_addr = "0.0.0.0:443"          # UDP port the Germany client dials
+transport = "kcp"
+token     = "e2b75f4de1a6e887c84c528a139e81b1e961a9ef4a9bd356"
+
+[server.kcp]
+mode       = "fast3"               # fast3|fast2|fast|normal (fast3 = most aggressive)
+fec_data   = 10                    # FEC shards (must match the client)
+fec_parity = 3                     # ~30% redundancy: recovers up to 3 lost of 13
+mtu        = 1350
+snd_wnd    = 2048
+rcv_wnd    = 2048
+sock_buf   = 16777216
+
+[server.mux]
+enable = true
+keepalive_seconds  = 10
+max_stream_buffer  = 8388608
+max_receive_buffer = 33554432
+
+[[server.services]]
+name      = "web"
+bind_addr = "0.0.0.0:8443"         # public TCP port your VLESS users connect to
