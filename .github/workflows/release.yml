@@ -13,11 +13,20 @@ jobs:
     strategy:
       matrix:
         include:
-          - { goos: linux,   goarch: amd64 }
-          - { goos: linux,   goarch: arm64 }
-          - { goos: windows, goarch: amd64, ext: .exe }
-          - { goos: darwin,  goarch: amd64 }
-          - { goos: darwin,  goarch: arm64 }
+          # Linux — one static binary per arch the installer can detect, so the
+          # one-command install never has to build from source (no Go on the server).
+          - { goos: linux,   goarch: amd64,               arch: amd64 }
+          - { goos: linux,   goarch: arm64,               arch: arm64 }
+          - { goos: linux,   goarch: arm,   goarm: '7',   arch: armv7 }
+          - { goos: linux,   goarch: arm,   goarm: '6',   arch: armv6 }
+          - { goos: linux,   goarch: '386',               arch: '386' }
+          - { goos: linux,   goarch: riscv64,             arch: riscv64 }
+          - { goos: linux,   goarch: ppc64le,             arch: ppc64le }
+          - { goos: linux,   goarch: s390x,               arch: s390x }
+          # Desktop platforms (built from source elsewhere, published for convenience).
+          - { goos: windows, goarch: amd64, ext: .exe,    arch: amd64 }
+          - { goos: darwin,  goarch: amd64,               arch: amd64 }
+          - { goos: darwin,  goarch: arm64,               arch: arm64 }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -27,15 +36,18 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: '0'
         run: |
           VERSION=${GITHUB_REF_NAME}
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
-          OUT="cando1-${GOOS}-${GOARCH}${{ matrix.ext }}"
+          OUT="cando1-${{ matrix.goos }}-${{ matrix.arch }}${{ matrix.ext }}"
           go build -trimpath -ldflags "${LDFLAGS}" -o "${OUT}" .
+          sha256sum "${OUT}" > "${OUT}.sha256"
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: cando1-*
+          files: |
+            cando1-*

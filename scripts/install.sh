@@ -7,11 +7,13 @@
 # What it does (all of it, on any Ubuntu/Debian and any CPU):
 #   1. Detects your OS and CPU architecture (amd64, arm64, armv7, 386, riscv64…).
 #   2. Installs the few packages it needs (curl, tar, git, ca-certificates).
-#   3. Gets cando1: a prebuilt release binary when one exists for your arch,
-#      otherwise builds from source (auto-installing a Go toolchain if missing).
-#      Every transport is compiled in — tls / wss / ws / tcp+obfs / kcp — plus
-#      smux multiplexing, the connection pool and auto-reconnect. Nothing is
-#      left out.
+#   3. Gets cando1: downloads a prebuilt release binary for your arch straight
+#      from the GitHub release (no Go needed) and verifies its SHA-256. Only if
+#      no matching binary exists does it fall back to building from source
+#      (auto-installing a Go toolchain). Set CANDO1_METHOD=release to require the
+#      prebuilt binary and never build. Every transport is compiled in —
+#      tls / wss / ws / tcp+obfs / kcp — plus smux multiplexing, the connection
+#      pool and auto-reconnect. Nothing is left out.
 #   4. Installs the binary to /usr/local/bin/cando1.
 #   5. Enables BBR + tuned network buffers (the single biggest speed win).
 #   6. Optionally installs a systemd service for auto-start on boot.
@@ -29,6 +31,13 @@ BIN="${BIN_DIR}/cando1"
 GO_FALLBACK="${CANDO1_GO_VERSION:-go1.22.10}" # used if we can't query the latest
 DO_BBR="${CANDO1_BBR:-1}"                    # 1 = apply BBR/sysctl tuning
 DO_SERVICE="${CANDO1_SERVICE:-ask}"          # 1 | 0 | ask
+# How to obtain the binary:
+#   auto    (default) — prebuilt release binary; fall back to building from source
+#   release           — prebuilt release binary ONLY; never build, never needs Go
+#   source            — always build from source (installs a Go toolchain if needed)
+METHOD="${CANDO1_METHOD:-auto}"
+# Pin the release to install from ("latest" or a tag like v1.2.3).
+RELEASE="${CANDO1_RELEASE:-latest}"
 # Module proxy: goproxy.cn first helps on restricted networks (e.g. Iran).
 export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
 # go.sum in the repo already pins every dependency hash, so integrity is enforced
@@ -112,24 +121,52 @@ install_prereqs() {
 }
 
 # --- fetch: try a prebuilt release binary for this arch ---------------------
+# The release workflow publishes a static binary for every Linux arch the
+# installer can detect (amd64, arm64, armv7, armv6, 386, riscv64, ppc64le,
+# s390x), each named cando1-linux-<arch> with a matching .sha256 checksum.
+# So on a Linux server this path never needs Go — the tunnel binary is the
+# only thing that lands on disk.
 fetch_release_binary() {
-  # Only amd64/arm64 Linux binaries are published (see .github/workflows/release.yml).
-  [ "$OS" = "linux" ] || return 1
-  case "$ARCH" in amd64|arm64) ;; *) return 1 ;; esac
-  local url="https://github.com/${REPO}/releases/latest/download/cando1-linux-${ARCH}"
+  [ "$OS" = "linux" ] || { warn "no prebuilt binaries for ${OS} — build from source"; return 1; }
+  local asset="cando1-linux-${ARCH}"
+  local base
+  if [ "$RELEASE" = "latest" ]; then
+    base="https://github.com/${REPO}/releases/latest/download"
+  else
+    base="https://github.com/${REPO}/releases/download/${RELEASE}"
+  fi
+  local url="${base}/${asset}"
   info "trying prebuilt binary: ${url}"
   local tmp; tmp="$(mktemp)"
-  if curl -fsSL --retry 3 -o "$tmp" "$url" 2>/dev/null && [ -s "$tmp" ]; then
-    # sanity: must be an ELF binary, not an HTML error page
-    if head -c 4 "$tmp" | grep -qa 'ELF'; then
-      $SUDO install -m 0755 "$tmp" "$BIN"; rm -f "$tmp"
-      ok "installed prebuilt binary"
-      return 0
+  if ! { curl -fsSL --retry 3 -o "$tmp" "$url" 2>/dev/null && [ -s "$tmp" ]; }; then
+    rm -f "$tmp"
+    warn "no prebuilt binary for ${OS}/${ARCH} in the ${RELEASE} release"
+    return 1
+  fi
+  # sanity: must be an ELF binary, not an HTML error page
+  if ! head -c 4 "$tmp" | grep -qa 'ELF'; then
+    rm -f "$tmp"
+    warn "downloaded file is not a valid binary (got an error page?) — skipping"
+    return 1
+  fi
+  # integrity: verify the published SHA-256 when available (best effort).
+  local sum; sum="$(mktemp)"
+  if curl -fsSL --retry 3 -o "$sum" "${url}.sha256" 2>/dev/null && [ -s "$sum" ]; then
+    if command -v sha256sum >/dev/null 2>&1; then
+      local want got
+      want="$(awk '{print $1}' "$sum" | head -1)"
+      got="$(sha256sum "$tmp" | awk '{print $1}')"
+      if [ -n "$want" ] && [ "$want" != "$got" ]; then
+        rm -f "$tmp" "$sum"
+        die "checksum mismatch for ${asset} (expected ${want}, got ${got}) — refusing to install"
+      fi
+      ok "checksum verified"
     fi
   fi
-  rm -f "$tmp"
-  warn "no prebuilt binary for ${OS}/${ARCH} — will build from source"
-  return 1
+  rm -f "$sum"
+  $SUDO install -m 0755 "$tmp" "$BIN"; rm -f "$tmp"
+  ok "installed prebuilt binary (${asset})"
+  return 0
 }
 
 # --- ensure a Go toolchain (>= 1.21) ---------------------------------------
@@ -317,9 +354,20 @@ main() {
   detect_platform
   TMPDIR_BUILD="$(mktemp -d)"
   install_prereqs
-  if ! fetch_release_binary; then
-    build_from_source
-  fi
+  case "$METHOD" in
+    release)
+      fetch_release_binary || die "no prebuilt binary for ${OS}/${ARCH} in the ${RELEASE} release (CANDO1_METHOD=release). Remove CANDO1_METHOD to allow a source build, or pick a supported arch."
+      ;;
+    source)
+      info "CANDO1_METHOD=source — building from source"
+      build_from_source
+      ;;
+    auto|*)
+      if ! fetch_release_binary; then
+        build_from_source
+      fi
+      ;;
+  esac
   apply_bbr
   install_service
   summary_and_launch
