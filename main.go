@@ -20,6 +20,7 @@ import (
 	"github.com/meran77777/cando1/internal/app"
 	"github.com/meran77777/cando1/internal/config"
 	"github.com/meran77777/cando1/internal/menu"
+	"github.com/meran77777/cando1/internal/procmgr"
 )
 
 // Build metadata, overridable via -ldflags "-X main.version=...".
@@ -53,6 +54,8 @@ func main() {
 		runRole(args[1:], "server")
 	case "client":
 		runRole(args[1:], "client")
+	case "start", "stop", "status", "restart", "logs":
+		procControl(args[0], args[1:])
 	default:
 		if len(args[0]) > 0 && args[0][0] == '-' {
 			runRole(args, "")
@@ -97,6 +100,74 @@ func runRole(args []string, forceRole string) {
 	}
 }
 
+// procControl implements the start/stop/status/restart/logs subcommands that
+// manage a tunnel as a detached background process tracked by a pid file.
+//
+//	cando1 start   -c file   # run in the background
+//	cando1 stop    -c file   # graceful stop (then force-kill)
+//	cando1 status  -c file   # running? + recent log lines
+//	cando1 restart -c file   # stop (if running) then start
+//	cando1 logs    -c file   # print recent log lines
+func procControl(action string, args []string) {
+	fs := flag.NewFlagSet("cando1 "+action, flag.ExitOnError)
+	cfgPath := fs.String("c", "", "path to TOML config file (required)")
+	_ = fs.Parse(args)
+	if *cfgPath == "" {
+		fmt.Fprintln(os.Stderr, "error: -c <config.toml> is required")
+		os.Exit(2)
+	}
+	inst, err := procmgr.For(*cfgPath)
+	if err != nil {
+		fatal(err)
+	}
+	switch action {
+	case "start", "restart":
+		// Validate the config before spawning so failures are visible here
+		// rather than only in the background log.
+		if _, err := config.Load(*cfgPath); err != nil {
+			fatal(err)
+		}
+		exe, err := procmgr.SelfExe()
+		if err != nil {
+			fatal(err)
+		}
+		var pid int
+		if action == "restart" {
+			pid, err = inst.Restart(exe)
+		} else {
+			pid, err = inst.Start(exe)
+		}
+		if err != nil {
+			fatal(err)
+		}
+		fmt.Printf("cando1 %s: running in background (pid %d)\nlogs: %s\n", action, pid, inst.LogPath)
+	case "stop":
+		if err := inst.Stop(); err != nil {
+			fatal(err)
+		}
+		fmt.Println("cando1 stopped")
+	case "status":
+		if running, pid := inst.Status(); running {
+			fmt.Printf("cando1: RUNNING (pid %d)\n", pid)
+		} else {
+			fmt.Println("cando1: not running")
+		}
+		printLogTail(inst)
+	case "logs":
+		printLogTail(inst)
+	}
+}
+
+func printLogTail(inst procmgr.Instance) {
+	lines, err := inst.LogTail(30)
+	if err != nil {
+		return
+	}
+	for _, l := range lines {
+		fmt.Println(l)
+	}
+}
+
 func genToken() string {
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
@@ -108,9 +179,16 @@ func usage() {
 
 USAGE:
   cando1                     interactive menu / setup wizard
-  cando1 -c <config.toml>    run the role defined by the config
+  cando1 -c <config.toml>    run the role defined by the config (foreground)
   cando1 server -c <file>    run as server (validates role)
   cando1 client -c <file>    run as client (validates role)
+
+  cando1 start   -c <file>   run the config in the BACKGROUND (detached)
+  cando1 stop    -c <file>   stop the background tunnel
+  cando1 restart -c <file>   restart the background tunnel
+  cando1 status  -c <file>   show whether it is running + recent logs
+  cando1 logs    -c <file>   print recent background logs
+
   cando1 gen-token           print a fresh random token
   cando1 version             print version
   cando1 help                show this help

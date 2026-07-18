@@ -40,14 +40,20 @@ func Run(version, commit, date string) error {
 		fmt.Println()
 		fmt.Println("  ===================  MAIN MENU  ===================")
 		fmt.Println("   [1]  Quick setup wizard  (generate configs & run)")
-		fmt.Println("   [2]  Run as SERVER   from a config file")
-		fmt.Println("   [3]  Run as CLIENT   from a config file")
-		fmt.Println("   [4]  Show example configurations")
-		fmt.Println("   [5]  Generate a random token")
-		fmt.Println("   [6]  Help & concepts")
+		fmt.Println("   [2]  Run as SERVER   from a config file (foreground)")
+		fmt.Println("   [3]  Run as CLIENT   from a config file (foreground)")
+		fmt.Println("   ---- background ----")
+		fmt.Println("   [4]  Start a tunnel in the BACKGROUND")
+		fmt.Println("   [5]  Stop a background tunnel")
+		fmt.Println("   [6]  Status / logs of a background tunnel")
+		fmt.Println("   [7]  Edit a tunnel  (add / remove ports)")
+		fmt.Println("   --------------------")
+		fmt.Println("   [8]  Show example configurations")
+		fmt.Println("   [9]  Generate a random token")
+		fmt.Println("   [h]  Help & concepts")
 		fmt.Println("   [0]  Exit")
 		fmt.Println("  ==================================================")
-		switch strings.TrimSpace(ask("  Select")) {
+		switch strings.ToLower(strings.TrimSpace(ask("  Select"))) {
 		case "1":
 			if err := wizard(); err != nil {
 				fmt.Printf("  ! wizard error: %v\n", err)
@@ -57,10 +63,18 @@ func Run(version, commit, date string) error {
 		case "3":
 			runFromFile("client")
 		case "4":
-			printExamples()
+			startBackground()
 		case "5":
-			fmt.Printf("\n  token = %s\n", genToken())
+			stopBackground()
 		case "6":
+			showStatus()
+		case "7":
+			editTunnel()
+		case "8":
+			printExamples()
+		case "9":
+			fmt.Printf("\n  token = %s\n", genToken())
+		case "h", "help":
 			printHelp()
 		case "0", "q", "quit", "exit":
 			fmt.Println("  bye.")

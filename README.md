@@ -198,6 +198,31 @@ cando1 client -c client.toml     # on the Iran client
 cando1 gen-token                 # print a fresh token
 ```
 
+## Run in the background & manage the tunnel
+
+Run a tunnel detached (it keeps running after you log out) and manage it without
+holding the terminal:
+
+```bash
+cando1 start   -c cando1-server.toml   # run detached in the background
+cando1 status  -c cando1-server.toml   # running? + recent log lines
+cando1 logs    -c cando1-server.toml   # print recent logs
+cando1 restart -c cando1-server.toml   # apply config changes
+cando1 stop    -c cando1-server.toml   # graceful stop
+```
+
+Each background tunnel is tracked by a `.pid` file and writes to a `.log` file
+next to its config, so a machine can run several tunnels at once. The
+interactive menu exposes the same actions: **[4] Start in background**,
+**[5] Stop**, **[6] Status/logs**, and **[7] Edit** — which lets you **add or
+remove forwarded ports** on an existing config and restart the running tunnel to
+apply them. The setup wizard also offers to start the new tunnel in the
+background right away.
+
+> For boot persistence, the one-command installer can still install a **systemd**
+> service (`CANDO1_SERVICE=1`); the background commands above are the quick,
+> no-root way to keep a tunnel running between logins.
+
 ## Maximizing speed
 
 1. **Enable BBR on both ends** (the installer does this; or run

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/meran77777/cando1/internal/config"
+	"github.com/meran77777/cando1/internal/procmgr"
 )
 
 type svcPair struct {
@@ -154,6 +155,11 @@ func wizard() error {
 		if d.thisMachine == "server" {
 			path = serverPath
 		}
+		// Background is the recommended default: the tunnel keeps running after
+		// you close this session, and you can manage it from the menu ([4]-[7]).
+		if askYesNo("  Run in the BACKGROUND (keeps running after you exit)?", true) {
+			return startBackgroundPath(path)
+		}
 		cfg, err := config.Load(path)
 		if err != nil {
 			return err
@@ -161,6 +167,28 @@ func wizard() error {
 		fmt.Printf("  starting %s (Ctrl+C to stop)...\n\n", d.thisMachine)
 		return runLoaded(cfg)
 	}
+	return nil
+}
+
+// startBackgroundPath launches a freshly-generated config as a detached
+// background process and prints how to manage it.
+func startBackgroundPath(path string) error {
+	inst, err := procmgr.For(path)
+	if err != nil {
+		return err
+	}
+	exe, err := procmgr.SelfExe()
+	if err != nil {
+		return err
+	}
+	pid, err := inst.Start(exe)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n  started in the background (pid %d)\n", pid)
+	fmt.Printf("  logs:    %s\n", inst.LogPath)
+	fmt.Printf("  manage:  cando1 status -c %s   |   cando1 stop -c %s\n", path, path)
+	fmt.Println("  or use the main menu: [6] status/logs, [5] stop, [7] edit ports.")
 	return nil
 }
 
