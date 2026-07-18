@@ -23,6 +23,14 @@ const (
 	TransportKCP = "kcp"
 )
 
+// Per-mapping L4 protocol. This is independent of the carrier transport: a UDP
+// forward/service is framed as datagrams over the same multiplexed tunnel, so it
+// works over every transport (tls/wss/ws/tcp/kcp).
+const (
+	ProtoTCP = "tcp"
+	ProtoUDP = "udp"
+)
+
 // Config is the root document. Exactly one of Server / Client must be present.
 type Config struct {
 	Log    LogConfig     `toml:"log"`
@@ -122,6 +130,7 @@ type ClientConfig struct {
 // accepted connection to the client, which pipes it to its matching local target.
 type Service struct {
 	Name     string `toml:"name"`
+	Protocol string `toml:"protocol"`  // tcp (default) | udp
 	BindAddr string `toml:"bind_addr"` // public listen addr on the server, e.g. 0.0.0.0:8443
 }
 
@@ -135,9 +144,24 @@ type ClientTarget struct {
 // connection is tunneled to the server, which dials TargetAddr.
 type Forward struct {
 	Name       string `toml:"name"`
+	Protocol   string `toml:"protocol"`    // tcp (default) | udp
 	LocalAddr  string `toml:"local_addr"`  // client-side listen addr, e.g. 0.0.0.0:1080
 	TargetAddr string `toml:"target_addr"` // addr the server dials, e.g. 127.0.0.1:1080
 }
+
+// NormProto lowercases a protocol string and defaults empty to tcp.
+func NormProto(p string) string {
+	p = strings.ToLower(strings.TrimSpace(p))
+	if p == "" {
+		return ProtoTCP
+	}
+	return p
+}
+
+// IsUDP reports whether a mapping's protocol is UDP.
+func IsUDP(p string) bool { return NormProto(p) == ProtoUDP }
+
+func validProto(p string) bool { return p == ProtoTCP || p == ProtoUDP }
 
 // DefaultMux returns tuned defaults for the multiplexer.
 func DefaultMux() MuxConfig {
@@ -185,6 +209,9 @@ func (c *Config) normalize() {
 		if s.Transport == TransportKCP {
 			fillKCPDefaults(&s.KCP)
 		}
+		for i := range s.Services {
+			s.Services[i].Protocol = NormProto(s.Services[i].Protocol)
+		}
 	}
 	if c.Client != nil {
 		cl := c.Client
@@ -215,6 +242,9 @@ func (c *Config) normalize() {
 		}
 		if cl.Transport == TransportKCP {
 			fillKCPDefaults(&cl.KCP)
+		}
+		for i := range cl.Forwards {
+			cl.Forwards[i].Protocol = NormProto(cl.Forwards[i].Protocol)
 		}
 	}
 }
@@ -277,6 +307,9 @@ func (c *Config) Validate() error {
 			if svc.Name == "" || svc.BindAddr == "" {
 				return fmt.Errorf("server.services[%d] needs name and bind_addr", i)
 			}
+			if !validProto(svc.Protocol) {
+				return fmt.Errorf("server.services[%d] protocol %q is invalid (tcp|udp)", i, svc.Protocol)
+			}
 			if seen[svc.Name] {
 				return fmt.Errorf("server.services duplicate name %q", svc.Name)
 			}
@@ -304,6 +337,9 @@ func (c *Config) Validate() error {
 		for i, f := range cl.Forwards {
 			if f.LocalAddr == "" || f.TargetAddr == "" {
 				return fmt.Errorf("client.forwards[%d] needs local_addr and target_addr", i)
+			}
+			if !validProto(f.Protocol) {
+				return fmt.Errorf("client.forwards[%d] protocol %q is invalid (tcp|udp)", i, f.Protocol)
 			}
 		}
 	}

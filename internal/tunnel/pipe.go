@@ -3,9 +3,15 @@ package tunnel
 import (
 	"io"
 	"net"
+	"time"
 
 	"github.com/meran77777/cando1/internal/transport"
 )
+
+// tcpDialWait bounds how long the tunnel waits when dialing a local/target
+// address before giving up on a connection. Kept short so an unreachable target
+// never pins a goroutine (and its user connection) for long.
+const tcpDialWait = 5 * time.Second
 
 // pipe copies data bidirectionally between a and b until either side closes,
 // then tears both down. Buffers come from the shared pool to keep the hot path

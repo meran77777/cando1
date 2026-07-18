@@ -25,11 +25,15 @@ type Client struct {
 	sessions   *mux.SessionSet
 	serviceMap map[string]string // reverse service name -> local target addr
 
-	mu         sync.Mutex
-	forwardLns []net.Listener
-	done       chan struct{}
-	closeOnce  sync.Once
+	mu          sync.Mutex
+	forwardLns  []net.Listener
+	packetConns []net.PacketConn // UDP forward listeners
+	done        chan struct{}
+	closeOnce   sync.Once
 }
+
+// errNoTunnel signals that no live tunnel session was available in time.
+var errNoTunnel = errors.New("no tunnel session available")
 
 // NewClient builds a Client from config.
 func NewClient(cfg *config.ClientConfig) (*Client, error) {
@@ -164,7 +168,7 @@ func (c *Client) handleReverseStream(stream *smux.Stream) {
 		_ = stream.Close()
 		return
 	}
-	if kind != protocol.KindReverse {
+	if kind != protocol.KindReverse && kind != protocol.KindReverseUDP {
 		_ = stream.Close()
 		return
 	}
@@ -174,7 +178,18 @@ func (c *Client) handleReverseStream(stream *smux.Stream) {
 		_ = stream.Close()
 		return
 	}
-	dst, err := net.DialTimeout("tcp", local, 10*time.Second)
+	if kind == protocol.KindReverseUDP {
+		uc, err := net.DialTimeout("udp", local, tcpDialWait)
+		if err != nil {
+			xlog.Warnf("reverse %q (udp): dial local %s failed: %v", name, local, err)
+			_ = stream.Close()
+			return
+		}
+		xlog.Debugf("reverse udp stream %q -> %s", name, local)
+		bridgeUDP(stream, uc)
+		return
+	}
+	dst, err := net.DialTimeout("tcp", local, tcpDialWait)
 	if err != nil {
 		xlog.Warnf("reverse %q: dial local %s failed: %v", name, local, err)
 		_ = stream.Close()
@@ -186,6 +201,9 @@ func (c *Client) handleReverseStream(stream *smux.Stream) {
 }
 
 func (c *Client) serveForward(f config.Forward) error {
+	if config.IsUDP(f.Protocol) {
+		return c.serveForwardUDP(f)
+	}
 	ln, err := net.Listen("tcp", f.LocalAddr)
 	if err != nil {
 		return err
@@ -213,6 +231,42 @@ func (c *Client) serveForward(f config.Forward) error {
 			go c.dispatchForward(f, user)
 		}
 	}()
+	return nil
+}
+
+// serveForwardUDP binds a local UDP socket and tunnels each source address's
+// datagrams to the server, which reaches TargetAddr over UDP.
+func (c *Client) serveForwardUDP(f config.Forward) error {
+	uaddr, err := net.ResolveUDPAddr("udp", f.LocalAddr)
+	if err != nil {
+		return err
+	}
+	pc, err := net.ListenUDP("udp", uaddr)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.packetConns = append(c.packetConns, pc)
+	c.mu.Unlock()
+	xlog.Infof("forward %q (udp): %s -> (tunnel) -> %s", f.Name, f.LocalAddr, f.TargetAddr)
+	target := f.TargetAddr
+	go serveUDPListener(pc, func() (*smux.Stream, error) {
+		sess := c.waitSession(udpSessionWait)
+		if sess == nil {
+			return nil, errNoTunnel
+		}
+		stream, err := sess.OpenStream()
+		if err != nil {
+			return nil, err
+		}
+		_ = stream.SetWriteDeadline(time.Now().Add(udpHeaderWait))
+		if err := protocol.WriteStreamHeader(stream, protocol.KindForwardUDP, target); err != nil {
+			_ = stream.Close()
+			return nil, err
+		}
+		_ = stream.SetWriteDeadline(time.Time{})
+		return stream, nil
+	})
 	return nil
 }
 
@@ -279,6 +333,9 @@ func (c *Client) Close() error {
 		c.mu.Lock()
 		for _, ln := range c.forwardLns {
 			_ = ln.Close()
+		}
+		for _, pc := range c.packetConns {
+			_ = pc.Close()
 		}
 		c.mu.Unlock()
 		c.sessions.CloseAll()

@@ -31,11 +31,12 @@ type Server struct {
 	whitelist map[string]bool
 	hsSem     chan struct{}
 
-	mu         sync.Mutex
-	ln         transport.Listener
-	reverseLns []net.Listener
-	done       chan struct{}
-	closeOnce  sync.Once
+	mu          sync.Mutex
+	ln          transport.Listener
+	reverseLns  []net.Listener
+	packetConns []net.PacketConn // UDP reverse listeners
+	done        chan struct{}
+	closeOnce   sync.Once
 }
 
 // NewServer builds a Server from config.
@@ -142,7 +143,7 @@ func (s *Server) handleForwardStream(stream *smux.Stream) {
 		_ = stream.Close()
 		return
 	}
-	if kind != protocol.KindForward {
+	if kind != protocol.KindForward && kind != protocol.KindForwardUDP {
 		xlog.Warnf("unexpected stream kind %d from client", kind)
 		_ = stream.Close()
 		return
@@ -168,7 +169,18 @@ func (s *Server) handleForwardStream(stream *smux.Stream) {
 		_ = stream.Close()
 		return
 	}
-	dst, err := net.DialTimeout("tcp", target, 10*time.Second)
+	if kind == protocol.KindForwardUDP {
+		uc, err := net.DialTimeout("udp", target, tcpDialWait)
+		if err != nil {
+			xlog.Warnf("forward udp dial %s failed: %v", target, err)
+			_ = stream.Close()
+			return
+		}
+		xlog.Debugf("forward udp stream -> %s", target)
+		bridgeUDP(stream, uc)
+		return
+	}
+	dst, err := net.DialTimeout("tcp", target, tcpDialWait)
 	if err != nil {
 		xlog.Warnf("forward dial %s failed: %v", target, err)
 		_ = stream.Close()
@@ -180,6 +192,10 @@ func (s *Server) handleForwardStream(stream *smux.Stream) {
 }
 
 func (s *Server) serveReverse(svc config.Service) {
+	if config.IsUDP(svc.Protocol) {
+		s.serveReverseUDP(svc)
+		return
+	}
 	ln, err := net.Listen("tcp", svc.BindAddr)
 	if err != nil {
 		xlog.Errorf("reverse service %q cannot listen on %s: %v", svc.Name, svc.BindAddr, err)
@@ -205,6 +221,43 @@ func (s *Server) serveReverse(svc config.Service) {
 		transport.TuneTCP(user)
 		go s.dispatchReverse(svc.Name, user)
 	}
+}
+
+// serveReverseUDP exposes a public UDP port and tunnels each source address's
+// datagrams to the client, which reaches its local target over UDP.
+func (s *Server) serveReverseUDP(svc config.Service) {
+	uaddr, err := net.ResolveUDPAddr("udp", svc.BindAddr)
+	if err != nil {
+		xlog.Errorf("reverse service %q (udp) bad bind_addr %s: %v", svc.Name, svc.BindAddr, err)
+		return
+	}
+	pc, err := net.ListenUDP("udp", uaddr)
+	if err != nil {
+		xlog.Errorf("reverse service %q (udp) cannot listen on %s: %v", svc.Name, svc.BindAddr, err)
+		return
+	}
+	s.mu.Lock()
+	s.packetConns = append(s.packetConns, pc)
+	s.mu.Unlock()
+	xlog.Infof("reverse service %q (udp) exposed on %s", svc.Name, svc.BindAddr)
+	name := svc.Name
+	serveUDPListener(pc, func() (*smux.Stream, error) {
+		sess := s.waitSession(udpSessionWait)
+		if sess == nil {
+			return nil, errNoTunnel
+		}
+		stream, err := sess.OpenStream()
+		if err != nil {
+			return nil, err
+		}
+		_ = stream.SetWriteDeadline(time.Now().Add(udpHeaderWait))
+		if err := protocol.WriteStreamHeader(stream, protocol.KindReverseUDP, name); err != nil {
+			_ = stream.Close()
+			return nil, err
+		}
+		_ = stream.SetWriteDeadline(time.Time{})
+		return stream, nil
+	})
 }
 
 // blockedForwardTarget reports whether target is an address range cando1
@@ -282,6 +335,9 @@ func (s *Server) Close() error {
 		}
 		for _, ln := range s.reverseLns {
 			_ = ln.Close()
+		}
+		for _, pc := range s.packetConns {
+			_ = pc.Close()
 		}
 		s.mu.Unlock()
 		s.sessions.CloseAll()

@@ -35,9 +35,9 @@ target_addr = "127.0.0.1:1080"
 		t.Fatalf("load: %v", err)
 	}
 
-	// Simulate an edit: add a second forward.
+	// Simulate an edit: add a second forward, this one UDP.
 	c.Client.Forwards = append(c.Client.Forwards, config.Forward{
-		Name: "dns", LocalAddr: "0.0.0.0:5353", TargetAddr: "1.1.1.1:53",
+		Name: "dns", Protocol: config.ProtoUDP, LocalAddr: "0.0.0.0:5353", TargetAddr: "1.1.1.1:53",
 	})
 
 	out := filepath.Join(dir, "cli-saved.toml")
@@ -57,6 +57,9 @@ target_addr = "127.0.0.1:1080"
 	}
 	if got := len(c2.Client.Forwards); got != 2 {
 		t.Fatalf("forwards after round-trip = %d, want 2", got)
+	}
+	if c2.Client.Forwards[1].Protocol != config.ProtoUDP {
+		t.Fatalf("udp protocol not preserved: %q", c2.Client.Forwards[1].Protocol)
 	}
 	if c2.Client.Token != "abc123" || c2.Client.ServerAddr != "1.2.3.4:443" {
 		t.Fatalf("core fields not preserved: %+v", c2.Client)

@@ -42,6 +42,14 @@ const (
 	// KindForward: opened by the client towards the server. Payload is the
 	// target host:port the server must dial.
 	KindForward byte = 2
+	// KindForwardUDP is KindForward for a UDP flow: the stream then carries
+	// length-prefixed datagrams instead of a raw byte stream. Payload is the
+	// target host:port the server must reach over UDP.
+	KindForwardUDP byte = 3
+	// KindReverseUDP is KindReverse for a UDP flow. Payload is the service name;
+	// the client reaches its local target over UDP. The stream carries
+	// length-prefixed datagrams.
+	KindReverseUDP byte = 4
 )
 
 const (

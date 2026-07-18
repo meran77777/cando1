@@ -130,7 +130,7 @@ func editClient(cfg *config.Config) {
 			fmt.Println("     (none)")
 		}
 		for i, f := range cl.Forwards {
-			fmt.Printf("     [%d] %s   %s -> %s\n", i+1, nameOr(f.Name, "svc"), f.LocalAddr, f.TargetAddr)
+			fmt.Printf("     [%d] %s (%s)   %s -> %s\n", i+1, nameOr(f.Name, "svc"), config.NormProto(f.Protocol), f.LocalAddr, f.TargetAddr)
 		}
 		fmt.Println("   Reverse services (server public port -> local target on this client):")
 		if len(cl.Services) == 0 {
@@ -147,9 +147,10 @@ func editClient(cfg *config.Config) {
 		switch strings.ToLower(strings.TrimSpace(ask("  edit"))) {
 		case "af":
 			name := askDefault("    name", fmt.Sprintf("svc%d", len(cl.Forwards)+1))
+			proto := askProto()
 			local := askDefault("    local listen on THIS client (host:port)", "0.0.0.0:1080")
 			target := askDefault("    target the server dials (host:port)", "127.0.0.1:1080")
-			cl.Forwards = append(cl.Forwards, config.Forward{Name: name, LocalAddr: local, TargetAddr: target})
+			cl.Forwards = append(cl.Forwards, config.Forward{Name: name, Protocol: proto, LocalAddr: local, TargetAddr: target})
 		case "df":
 			cl.Forwards = deleteAt(cl.Forwards, pickIndex("    delete forward #", len(cl.Forwards)))
 		case "ar":
@@ -175,7 +176,7 @@ func editServer(cfg *config.Config) {
 			fmt.Println("     (none)")
 		}
 		for i, svc := range s.Services {
-			fmt.Printf("     [%d] %s   %s\n", i+1, svc.Name, svc.BindAddr)
+			fmt.Printf("     [%d] %s (%s)   %s\n", i+1, svc.Name, config.NormProto(svc.Protocol), svc.BindAddr)
 		}
 		fmt.Printf("   allow_forward = %v  (client may open forward tunnels through this server)\n", s.AllowForward)
 		fmt.Print(`
@@ -186,8 +187,9 @@ func editServer(cfg *config.Config) {
 		switch strings.ToLower(strings.TrimSpace(ask("  edit"))) {
 		case "as":
 			name := askRequired("    service name (must match the client's)")
+			proto := askProto()
 			bind := askDefault("    public bind on THIS server (host:port)", "0.0.0.0:8443")
-			s.Services = append(s.Services, config.Service{Name: name, BindAddr: bind})
+			s.Services = append(s.Services, config.Service{Name: name, Protocol: proto, BindAddr: bind})
 		case "ds":
 			s.Services = deleteAt(s.Services, pickIndex("    delete service #", len(s.Services)))
 		case "tf":

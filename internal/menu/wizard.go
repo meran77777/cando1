@@ -12,6 +12,7 @@ import (
 
 type svcPair struct {
 	name       string
+	protocol   string // tcp | udp
 	publicBind string // public bind on the server (Iran, scenario 2)
 	localAddr  string // local target on the client (foreign, scenario 2)
 }
@@ -217,13 +218,14 @@ func gatherForwards() []config.Forward {
 		if name == "" {
 			break
 		}
+		proto := askProto()
 		local := askDefault("    local listen on the IRAN client (host:port)", "0.0.0.0:1080")
 		target := askDefault("    target the FOREIGN server dials (host:port)", "127.0.0.1:1080")
-		out = append(out, config.Forward{Name: name, LocalAddr: local, TargetAddr: target})
+		out = append(out, config.Forward{Name: name, Protocol: proto, LocalAddr: local, TargetAddr: target})
 		i++
 	}
 	if len(out) == 0 {
-		out = append(out, config.Forward{Name: "svc1", LocalAddr: "0.0.0.0:1080", TargetAddr: "127.0.0.1:1080"})
+		out = append(out, config.Forward{Name: "svc1", Protocol: config.ProtoTCP, LocalAddr: "0.0.0.0:1080", TargetAddr: "127.0.0.1:1080"})
 		fmt.Println("  (no entries given; added a default forward svc1)")
 	}
 	return out
@@ -241,13 +243,14 @@ func gatherServices() []svcPair {
 		if name == "" {
 			break
 		}
+		proto := askProto()
 		pub := askDefault("    public bind on the IRAN server (host:port)", "0.0.0.0:8443")
 		local := askDefault("    local target on the FOREIGN client (host:port)", "127.0.0.1:8443")
-		out = append(out, svcPair{name: name, publicBind: pub, localAddr: local})
+		out = append(out, svcPair{name: name, protocol: proto, publicBind: pub, localAddr: local})
 		i++
 	}
 	if len(out) == 0 {
-		out = append(out, svcPair{name: "svc1", publicBind: "0.0.0.0:8443", localAddr: "127.0.0.1:8443"})
+		out = append(out, svcPair{name: "svc1", protocol: config.ProtoTCP, publicBind: "0.0.0.0:8443", localAddr: "127.0.0.1:8443"})
 		fmt.Println("  (no entries given; added a default service svc1)")
 	}
 	return out
@@ -284,6 +287,9 @@ func buildServerTOML(d wizardData) string {
 		for _, s := range d.services {
 			b.WriteString("\n[[server.services]]\n")
 			fmt.Fprintf(&b, "name = \"%s\"\n", s.name)
+			if config.IsUDP(s.protocol) {
+				b.WriteString("protocol = \"udp\"\n")
+			}
 			fmt.Fprintf(&b, "bind_addr = \"%s\"\n", s.publicBind)
 		}
 	}
@@ -320,6 +326,9 @@ func buildClientTOML(d wizardData) string {
 		for _, f := range d.forwards {
 			b.WriteString("\n[[client.forwards]]\n")
 			fmt.Fprintf(&b, "name = \"%s\"\n", f.Name)
+			if config.IsUDP(f.Protocol) {
+				b.WriteString("protocol = \"udp\"\n")
+			}
 			fmt.Fprintf(&b, "local_addr = \"%s\"\n", f.LocalAddr)
 			fmt.Fprintf(&b, "target_addr = \"%s\"\n", f.TargetAddr)
 		}
@@ -331,6 +340,16 @@ func buildClientTOML(d wizardData) string {
 		}
 	}
 	return b.String()
+}
+
+// askProto prompts for the L4 protocol of a mapping (tcp default, or udp for
+// WireGuard/OpenVPN/DNS/games). UDP works over every carrier transport.
+func askProto() string {
+	p := strings.ToLower(strings.TrimSpace(askDefault("    protocol (tcp/udp)", "tcp")))
+	if p == config.ProtoUDP {
+		return config.ProtoUDP
+	}
+	return config.ProtoTCP
 }
 
 func writeKCPTOML(b *strings.Builder, section string) {

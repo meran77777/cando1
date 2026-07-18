@@ -158,6 +158,35 @@ CDN over a bare-IP `tls` endpoint on the most hostile networks.
 | `tcp`  | High-entropy noise (`obfs=true`) or raw bytes | Simple setups or chaining behind another encrypted layer. |
 | `kcp`  | Encrypted random UDP | **Speed mode.** Fastest on lossy links (UDP + FEC). Needs UDP open; less camouflaged. |
 
+## Tunnel UDP as well as TCP
+
+Any forward or reverse mapping can carry **UDP** instead of TCP — set
+`protocol = "udp"`. This is independent of the carrier: UDP is framed as
+datagrams over the same encrypted, multiplexed tunnel, so it rides **every**
+transport (`tls`/`wss`/`ws`/`tcp`/`kcp`), including through a CDN. Use it for
+WireGuard, OpenVPN (UDP), DNS, QUIC, and game/voice traffic.
+
+```toml
+# client: expose a local UDP port that tunnels out to a UDP target
+[[client.forwards]]
+name       = "wireguard"
+protocol   = "udp"
+local_addr = "0.0.0.0:51820"
+target_addr = "127.0.0.1:51820"
+```
+
+```toml
+# server: expose a public UDP port that tunnels back to the client's target
+[[server.services]]
+name      = "wireguard"
+protocol  = "udp"
+bind_addr = "0.0.0.0:51820"
+```
+
+Each UDP source address gets its own tunnel stream; idle flows are reclaimed
+automatically. The wizard and the **[7] Edit** menu both ask `tcp/udp` when you
+add a port, so no hand-editing is needed.
+
 ## Manual install / build
 
 **From source (Go 1.21+):**
