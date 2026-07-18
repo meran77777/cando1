@@ -40,6 +40,7 @@ func Run(version, commit, date string) error {
 		fmt.Println()
 		fmt.Println("  ===================  MAIN MENU  ===================")
 		fmt.Println("   [1]  Quick setup wizard  (generate configs & run)")
+		fmt.Println("   [c]  Cloudflare (wss) quick setup  (hide origin, look like HTTPS)")
 		fmt.Println("   [2]  Run as SERVER   from a config file (foreground)")
 		fmt.Println("   [3]  Run as CLIENT   from a config file (foreground)")
 		fmt.Println("   ---- background ----")
@@ -57,6 +58,10 @@ func Run(version, commit, date string) error {
 		case "1":
 			if err := wizard(); err != nil {
 				fmt.Printf("  ! wizard error: %v\n", err)
+			}
+		case "c", "cf", "cloudflare":
+			if err := cloudflareSetup(); err != nil {
+				fmt.Printf("  ! cloudflare setup error: %v\n", err)
 			}
 		case "2":
 			runFromFile("server")

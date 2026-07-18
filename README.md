@@ -138,7 +138,10 @@ the address. Do one of these instead:
 1. **Front the foreign server behind Cloudflare (recommended).** Use `ws`/`wss`,
    point a proxied (orange-cloud) DNS record at the server, and the tunnel looks
    like ordinary HTTPS to Cloudflare’s edge — and your origin IP is hidden. See
-   [`examples/`](examples/) `cloudflare-*.toml`.
+   [`examples/`](examples/) `cloudflare-*.toml`. The menu’s **[c] Cloudflare
+   quick setup** fills in every cando1-side setting from just your domain (the
+   client even verifies Cloudflare’s real certificate, `insecure = false`) and
+   prints the exact dashboard steps.
 2. **Use a real domain + a real certificate.** Put a Let’s Encrypt cert in
    `[server.tls] cert`/`key` and set `insecure = false` on the client. Set `sni`
    to a real, resolvable domain — never a placeholder.
